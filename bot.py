@@ -179,18 +179,17 @@ class CrearJornadaParte2View(discord.ui.View):
         await interaction.response.send_modal(CrearJornadaModal2(self.jornada))
 
 class CrearJornadaView(discord.ui.View):
-    def __init__(self):
+    def __init__(self, numero_jornada: int):
         super().__init__(timeout=None)
+        self.numero_jornada = numero_jornada
 
     @discord.ui.button(label="Crear Jornada", style=discord.ButtonStyle.success)
     async def crear(self, interaction: discord.Interaction, button: discord.ui.Button):
         if not interaction.user.guild_permissions.administrator:
             await interaction.response.send_message("⚠️ Solo administradores.", ephemeral=True)
             return
-        rows = db_query("SELECT MAX(jornada) FROM partidos", fetch=True)
-        last = rows[0][0] if rows and rows[0][0] else 0
-        jornada = last + 1
-        await interaction.response.send_modal(CrearJornadaModal1(jornada))
+        
+        await interaction.response.send_modal(CrearJornadaModal1(self.numero_jornada))
 
 # ---------- MODALES QUINIELA ----------
 class QuinielaModal1(discord.ui.Modal, title="Enviar Quiniela - Parte 1"):
@@ -378,8 +377,23 @@ class ResultadosView(discord.ui.View):
 # ---------- COMANDOS ----------
 
 @bot.command()
-async def crearjornada(ctx):
-    await ctx.send("📅 Pulsa el botón para crear una jornada:", view=CrearJornadaView())
+@commands.has_permissions(administrator=True)
+async def crearjornada(ctx, numero: int):
+    """
+    Crea una nueva jornada con un número específico.
+    """
+    # Comprobar si la jornada ya existe
+    existing = db_query("SELECT 1 FROM jornadas WHERE numero=?", (numero,), fetch=True)
+    if existing:
+        await ctx.send(f"⚠️ La jornada {numero} ya existe.")
+        return
+
+    # Crear la view pasando el número de la jornada
+    await ctx.send(
+        f"📅 Pulsa el botón para crear la jornada {numero}:",
+        view=CrearJornadaView(numero)
+    )
+
 
 @bot.command()
 @commands.has_permissions(administrator=True)
