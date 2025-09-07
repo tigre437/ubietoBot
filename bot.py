@@ -89,10 +89,10 @@ def db_query(query, params=(), fetch=False, many=False):
 
 def jornada_bloqueada(jornada: int) -> bool:
     rows = db_query(
-        "SELECT COUNT(*) FROM partidos WHERE jornada=? AND resultado IS NOT NULL",
+        "SELECT cerrada FROM quinielas WHERE Numero = ?",
         (jornada,), fetch=True
     )
-    return (rows and rows[0][0] > 0)
+    return (bool(rows) and rows[0][0] == 1)
 
 init_db()
 temp_data = {}
@@ -200,7 +200,7 @@ class QuinielaModal2(discord.ui.Modal, title="Enviar Quiniela - Parte 2"):
 
     async def on_submit(self, interaction: discord.Interaction):
         if jornada_bloqueada(self.jornada):
-            await interaction.response.send_message("⛔ Jornada bloqueada: ya hay resultados.", ephemeral=True)
+            await interaction.response.send_message("⛔ Jornada bloqueada.", ephemeral=True)
             return
 
         parte2 = []
@@ -260,7 +260,7 @@ class QuinielaView(discord.ui.View):
             await interaction.response.send_message("⚠️ No hay partidos.", ephemeral=True)
             return
         if jornada_bloqueada(self.jornada):
-            await interaction.response.send_message("⛔ Jornada bloqueada: ya hay resultados.", ephemeral=True)
+            await interaction.response.send_message("⛔ Jornada bloqueada.", ephemeral=True)
             return
 
         rows = db_query("SELECT prediccion FROM quinielas WHERE usuario_id=? AND jornada=?", (usuario_id, self.jornada), fetch=True)
@@ -580,7 +580,7 @@ async def editarquiniela(ctx, jornada:int):
         return
 
     if jornada_bloqueada(jornada):
-        await ctx.send("⛔ Esta jornada ya tiene resultados cargados y no se puede editar.")
+        await ctx.send("⛔ Esta jornada está cerrada.")
         return
 
     try:
@@ -609,6 +609,15 @@ async def suspender_partido(ctx, jornada: int, numero: int, estado: int):
     """
     db_query("UPDATE partidos SET activo=? WHERE jornada=? AND numero=?", (estado, jornada, numero))
     await ctx.send(f"✅ Partido {numero} de la jornada {jornada} marcado como {estado}.")
+
+@bot.command()
+@commands.has_permissions(administrator=True)
+async def cerrar_quiniela(ctx):
+    """
+    cerrar_quiniela
+    """
+    db_query("UPDATE quinielas SET estado=? WHERE usuario_id=?", (False, ctx.author.id))
+    await ctx.send("✅ Quiniela cerrada.")
 
 
 
