@@ -43,15 +43,29 @@ bot = PersistentViewBot()
 def init_db():
     with sqlite3.connect(DB_NAME) as conn:
         c = conn.cursor()
+        
+        # --- tabla de jornadas ---
+        c.execute("""
+        CREATE TABLE IF NOT EXISTS jornadas (
+            ID INTEGER PRIMARY KEY AUTOINCREMENT,
+            numero INTEGER UNIQUE,
+            cerrada INTEGER DEFAULT 0
+        )
+        """)
+        
+        # --- tabla de partidos ---
         c.execute("""
         CREATE TABLE IF NOT EXISTS partidos (
             jornada INTEGER,
             numero INTEGER,
             titulo TEXT,
             resultado TEXT,
+            activo INTEGER DEFAULT 1,
             PRIMARY KEY (jornada, numero)
         )
         """)
+
+        # --- tabla de quinielas ---
         c.execute("""
         CREATE TABLE IF NOT EXISTS quinielas (
             id INTEGER PRIMARY KEY AUTOINCREMENT,
@@ -61,6 +75,8 @@ def init_db():
             fecha TIMESTAMP
         )
         """)
+
+        # --- tabla de puntuaciones ---
         c.execute("""
         CREATE TABLE IF NOT EXISTS puntuaciones (
             id INTEGER PRIMARY KEY AUTOINCREMENT,
@@ -70,11 +86,9 @@ def init_db():
             fecha TIMESTAMP
         )
         """)
-        try:
-            c.execute("ALTER TABLE partidos ADD COLUMN resultado TEXT")
-        except sqlite3.OperationalError:
-            pass
+
         conn.commit()
+
 
 def db_query(query, params=(), fetch=False, many=False):
     with sqlite3.connect(DB_NAME) as conn:
@@ -88,11 +102,9 @@ def db_query(query, params=(), fetch=False, many=False):
         conn.commit()
 
 def jornada_bloqueada(jornada: int) -> bool:
-    rows = db_query(
-        "SELECT cerrada FROM quinielas WHERE Numero = ?",
-        (jornada,), fetch=True
-    )
-    return (bool(rows) and rows[0][0] == 1)
+    rows = db_query("SELECT cerrada FROM jornadas WHERE numero=?", (jornada,), fetch=True)
+    return bool(rows) and rows[0][0] == 1
+
 
 init_db()
 temp_data = {}
@@ -131,11 +143,27 @@ class CrearJornadaModal2(discord.ui.Modal):
             self.inputs.append(campo)
 
     async def on_submit(self, interaction: discord.Interaction):
+        # Recuperar la parte 1 de los partidos y añadir la parte 2
         partidos = temp_data.get(interaction.user.id, []) + [campo.value.strip() for campo in self.inputs]
-        params = [(self.jornada, i, partido) for i, partido in enumerate(partidos, start=1)]
-        db_query("INSERT OR REPLACE INTO partidos (jornada, numero, titulo) VALUES (?, ?, ?)", params, many=True)
 
-        embed = discord.Embed(title=f"📋 Quiniela Jornada {self.jornada}", description="Haz click en el botón para enviar tu pronóstico.", color=discord.Color.green())
+        # Guardar en la tabla partidos
+        params = [(self.jornada, i, partido) for i, partido in enumerate(partidos, start=1)]
+        db_query(
+            "INSERT OR REPLACE INTO partidos (jornada, numero, titulo) VALUES (?, ?, ?)",
+            params, many=True
+        )
+
+        # Registrar jornada en tabla jornadas si no existe
+        existing = db_query("SELECT 1 FROM jornadas WHERE numero=?", (self.jornada,), fetch=True)
+        if not existing:
+            db_query("INSERT INTO jornadas (numero, cerrada) VALUES (?, 0)", (self.jornada,))
+
+        # Enviar embed con los partidos
+        embed = discord.Embed(
+            title=f"📋 Quiniela Jornada {self.jornada}",
+            description="Haz click en el botón para enviar tu pronóstico.",
+            color=discord.Color.green()
+        )
         for i, partido in enumerate(partidos, start=1):
             embed.add_field(name=f"Partido {i}", value=partido, inline=False)
 
@@ -612,12 +640,30 @@ async def suspender_partido(ctx, jornada: int, numero: int, estado: int):
 
 @bot.command()
 @commands.has_permissions(administrator=True)
-async def cerrar_quiniela(ctx):
-    """
-    cerrar_quiniela
-    """
-    db_query("UPDATE quinielas SET estado=? WHERE usuario_id=?", (False, ctx.author.id))
-    await ctx.send("✅ Quiniela cerrada.")
+async def cerrar_quiniela(ctx, jornada: int):
+    # Comprobar si la jornada existe
+    rows = db_query("SELECT cerrada FROM jornadas WHERE numero=?", (jornada,), fetch=True)
+    if not rows:
+        ctx.send("❌ No existe una jornada con ese número.")
+    else:
+        # Si existe, actualizar a cerrada
+        db_query("UPDATE jornadas SET cerrada=1 WHERE numero=?", (jornada,))
+    
+    await ctx.send(f"Jornada {jornada} marcada como cerrada ✅")
+
+
+@bot.command()
+@commands.has_permissions(administrator=True)
+async def abrir_quiniela(ctx, jornada: int):
+    # Comprobar si la jornada existe
+    rows = db_query("SELECT cerrada FROM jornadas WHERE numero=?", (jornada,), fetch=True)
+    if not rows:
+        ctx.send("❌ No existe una jornada con ese número.")
+    else:
+        # Si existe, actualizar a abierta
+        db_query("UPDATE jornadas SET cerrada=0 WHERE numero=?", (jornada,))
+    
+    await ctx.send(f"Jornada {jornada} marcada como abierta ✅")
 
 
 
