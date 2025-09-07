@@ -12,7 +12,11 @@ load_dotenv()
 TOKEN = os.getenv("DISCORD_TOKEN")
 
 # --- DB HELPERS ---
-DB_NAME = r"C:\Users\david\Desktop\ubietoBot\quiniela.db"
+# Obtener la carpeta donde está bot.py
+BASE_DIR = os.path.dirname(os.path.abspath(__file__))
+
+# Base de datos en la misma carpeta
+DB_NAME = os.path.join(BASE_DIR, "quiniela.db")
 
 class PersistentViewBot(commands.Bot):
     def __init__(self):
