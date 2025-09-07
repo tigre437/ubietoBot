@@ -644,12 +644,11 @@ async def cerrar_quiniela(ctx, jornada: int):
     # Comprobar si la jornada existe
     rows = db_query("SELECT cerrada FROM jornadas WHERE numero=?", (jornada,), fetch=True)
     if not rows:
-        ctx.send("❌ No existe una jornada con ese número.")
+        await ctx.send("❌ No existe una jornada con ese número.")
     else:
         # Si existe, actualizar a cerrada
         db_query("UPDATE jornadas SET cerrada=1 WHERE numero=?", (jornada,))
-    
-    await ctx.send(f"Jornada {jornada} marcada como cerrada ✅")
+        await ctx.send(f"Jornada {jornada} marcada como cerrada ✅")
 
 
 @bot.command()
@@ -658,12 +657,11 @@ async def abrir_quiniela(ctx, jornada: int):
     # Comprobar si la jornada existe
     rows = db_query("SELECT cerrada FROM jornadas WHERE numero=?", (jornada,), fetch=True)
     if not rows:
-        ctx.send("❌ No existe una jornada con ese número.")
+        await ctx.send("❌ No existe una jornada con ese número.")
     else:
         # Si existe, actualizar a abierta
         db_query("UPDATE jornadas SET cerrada=0 WHERE numero=?", (jornada,))
-    
-    await ctx.send(f"Jornada {jornada} marcada como abierta ✅")
+        await ctx.send(f"Jornada {jornada} marcada como abierta ✅")
 
 
 
