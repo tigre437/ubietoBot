@@ -496,6 +496,9 @@ async def corregir(ctx, jornada: int):
 
 @bot.command()
 async def verquiniela(ctx, jornada: int):
+    if jornada == None:
+        await ctx.send("🔎 Debes especificar la jornada de la quiniela que quieres ver. Ej: `!verquiniela 1`")
+        return
     usuario_id = str(ctx.author.id)
     rows = db_query("SELECT prediccion, fecha FROM quinielas WHERE usuario_id=? AND jornada=?", (usuario_id, jornada), fetch=True)
     if not rows:
@@ -611,7 +614,7 @@ class EditarQuinielaParte2View(discord.ui.View):
 @bot.command()
 async def editarquiniela(ctx, jornada:int):
     if jornada == None:
-        await ctx.send("⚠️ Debes especificar una jornada.")
+        await ctx.send("⚠️ Debes especificar una jornada. Ej: !editarquiniela 1")
         return
     usuario_id = str(ctx.author.id)
     if ctx.guild is not None:
