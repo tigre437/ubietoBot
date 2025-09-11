@@ -500,24 +500,39 @@ async def corregir(ctx, jornada: int):
 
 
 @bot.command()
-async def verquiniela(ctx, jornada: int):
-    if jornada == None:
-        await ctx.send("🔎 Debes especificar la jornada de la quiniela que quieres ver. Ej: `!verquiniela 1`")
+async def verquiniela(ctx, jornada: int = None):
+    await ctx.message.delete()  # borra el mensaje del comando
+
+    if jornada is None:
+        await ctx.send("🔎 Debes especificar la jornada de la quiniela que quieres ver. Ej: `!verquiniela 1`", delete_after=10)
         return
+
     usuario_id = str(ctx.author.id)
-    rows = db_query("SELECT prediccion, fecha FROM quinielas WHERE usuario_id=? AND jornada=?", (usuario_id, jornada), fetch=True)
+    rows = db_query(
+        "SELECT prediccion, fecha FROM quinielas WHERE usuario_id=? AND jornada=?",
+        (usuario_id, jornada),
+        fetch=True
+    )
+
     if not rows:
-        await ctx.send("🔎 No tienes quiniela guardada para esta jornada.")
+        await ctx.send("🔎 No tienes quiniela guardada para esta jornada.", delete_after=10)
         return
+
     pred, fecha = rows[0]
     try:
         lista = json.loads(pred)
     except json.JSONDecodeError:
         lista = pred.split(",")
+
     texto = "\n".join([f"{i+1}. {v}" for i, v in enumerate(lista)])
-    embed = discord.Embed(title=f"📝 Tu quiniela - Jornada {jornada}", description=texto, color=discord.Color.blue())
+    embed = discord.Embed(
+        title=f"📝 Tu quiniela - Jornada {jornada}",
+        description=texto,
+        color=discord.Color.blue()
+    )
     embed.set_footer(text=f"Última edición: {fecha}")
-    await ctx.send(embed=embed)
+
+    await ctx.author.send(embed=embed)  # se manda por privado
 
 
 
@@ -617,24 +632,27 @@ class EditarQuinielaParte2View(discord.ui.View):
 
 # ---------- COMANDO ----------
 @bot.command()
-async def editarquiniela(ctx, jornada:int):
-    if jornada == None:
-        await ctx.send("⚠️ Debes especificar una jornada. Ej: !editarquiniela 1")
-        return
-    usuario_id = str(ctx.author.id)
+async def editarquiniela(ctx, jornada: int = None):
+    # Borrar el mensaje del comando si viene de un servidor
     if ctx.guild is not None:
         await ctx.message.delete()
+
+    if jornada is None:
+        await ctx.send("⚠️ Debes especificar una jornada. Ej: !editarquiniela 1", delete_after=10)
+        return
+
+    usuario_id = str(ctx.author.id)
     rows = db_query(
         "SELECT prediccion FROM quinielas WHERE usuario_id=? AND jornada=?",
         (usuario_id, jornada),
         fetch=True
     )
     if not rows:
-        await ctx.send("⚠️ No tienes quiniela registrada para esta jornada.")
+        await ctx.send("⚠️ No tienes quiniela registrada para esta jornada.", delete_after=10)
         return
 
     if jornada_bloqueada(jornada):
-        await ctx.send("⛔ Esta jornada está cerrada.")
+        await ctx.send("⛔ Esta jornada está cerrada.", delete_after=10)
         return
 
     try:
@@ -642,17 +660,47 @@ async def editarquiniela(ctx, jornada:int):
     except json.JSONDecodeError:
         predicciones = rows[0][0].split(",")
 
-    # Abrimos DM
+    # Intentar abrir DM
     try:
         dm = await ctx.author.create_dm()
         await dm.send(
             "✏️ Pulsa el botón para editar tu quiniela:",
             view=EditarQuinielaButton(jornada, predicciones)
         )
-        if ctx.guild is not None:
-            await ctx.send("✅ Te he enviado un mensaje privado para editar tu quiniela.",delete_after=4)
     except discord.Forbidden:
         await ctx.send("⚠️ No puedo enviarte mensajes privados. Revisa tu configuración de privacidad.")
+
+
+@bot.event
+async def on_message(message):
+    # Evita que el bot borre sus propios mensajes
+    if message.author == bot.user:
+        return
+
+    # Solo aplicamos la regla en canales tipo jornada-X
+    if message.channel.name.startswith("jornada-"):
+        # Saltar si el autor es administrador
+        if message.author.guild_permissions.administrator:
+            await bot.process_commands(message)
+            return
+
+        # Si no es un comando, se borra
+        if not message.content.startswith(bot.command_prefix):
+            try:
+                await message.delete()
+                await message.author.send(
+                    f"⚠️ Tu mensaje en **#{message.channel.name}** fue borrado porque en ese canal solo se permiten comandos.\n"
+                    f"ℹ️ Para más información revisa el canal <#1402292699863974129>."
+                )
+            except discord.Forbidden:
+                # Si el usuario tiene bloqueados los DMs, no hacemos nada
+                pass
+            return
+
+    # Muy importante: permitir procesar comandos
+    await bot.process_commands(message)
+
+
 
 @bot.command()
 @commands.has_permissions(administrator=True)
