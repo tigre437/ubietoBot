@@ -183,15 +183,18 @@ class CrearJornadaParte2View(discord.ui.View):
         await interaction.response.send_modal(CrearJornadaModal2(self.jornada))
 
 class CrearJornadaView(discord.ui.View):
-    def __init__(self, numero_jornada: int):
+    def __init__(self, numero_jornada: int, author_id: int):
         super().__init__(timeout=None)
         self.numero_jornada = numero_jornada
+        self.author_id = author_id
 
     @discord.ui.button(label="Crear Jornada", style=discord.ButtonStyle.success)
     async def crear(self, interaction: discord.Interaction, button: discord.ui.Button):
         if not interaction.user.guild_permissions.administrator:
             await interaction.response.send_message("⚠️ Solo administradores.", ephemeral=True)
             return
+        if interaction.user.id != self.author_id:
+            await interaction.response.send_message("⚠️ No eres el encargado de esta quiniela, pregunta al que puso el comando.")
         
         await interaction.response.send_modal(CrearJornadaModal1(self.numero_jornada))
 
@@ -395,7 +398,7 @@ async def crearjornada(ctx, numero: int):
     # Crear la view pasando el número de la jornada
     await ctx.send(
         f"📅 Pulsa el botón para crear la jornada {numero}:",
-        view=CrearJornadaView(numero)
+        view=CrearJornadaView(numero, ctx.author.id)
     )
 
 
