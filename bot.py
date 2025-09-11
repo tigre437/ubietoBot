@@ -412,6 +412,7 @@ async def borrarjornada(ctx, jornada: int):
     db_query("DELETE FROM partidos WHERE jornada=?", (jornada,))
     db_query("DELETE FROM quinielas WHERE jornada=?", (jornada,))
     db_query("DELETE FROM puntuaciones WHERE jornada=?", (jornada,))
+    db_query("DELETE FROM jornadas WHERE numero = ?", (jornada))
 
     await ctx.send(f"🗑️ Jornada {jornada} y todos sus datos han sido eliminados.")
 
