@@ -25,21 +25,18 @@ class PersistentViewBot(commands.Bot):
         super().__init__(command_prefix="!", intents=intents)
 
     async def setup_hook(self) -> None:
-    # Buscar la jornada activa (la más reciente sin resultados)
-        row = db_query("""
-            SELECT jornada 
-            FROM partidos 
-            WHERE resultado IS NULL 
-            ORDER BY jornada DESC 
-            LIMIT 1
+    # Buscar las jornadas activas
+        rows = db_query("""
+            SELECT numero FROM jornadas WHERE cerrada=0
         """, fetch=True)
 
-        if row:
-            jornada_activa = row[0][0]
-            self.add_view(QuinielaView(jornada_activa))
-            print(f"✅ View registrada para la jornada {jornada_activa}")
+        if rows:
+            for (jornada,) in rows:
+                self.add_view(QuinielaView(jornada))
+                print(f"✅ View registrada para la jornada {jornada}")
         else:
-            print("⚠️ No hay jornada activa, no se registró ninguna view persistente.")
+            print("⚠️ No hay jornadas activas, no se registró ninguna view persistente.")
+
 
 
 bot = PersistentViewBot()
@@ -278,14 +275,32 @@ class QuinielaView(discord.ui.View):
         super().__init__(timeout=None)
         self.jornada = jornada
 
-        # Crear el botón con custom_id único
-        boton = discord.ui.Button(
+        # Botón para enviar quiniela
+        boton_enviar = discord.ui.Button(
             label="Enviar Quiniela",
             style=discord.ButtonStyle.primary,
-            custom_id=f"persistent_view:quiniela_{jornada}"
+            custom_id=f"persistent_view:quiniela_enviar_{jornada}"
         )
-        boton.callback = self.enviar  # asignar función
-        self.add_item(boton)
+        boton_enviar.callback = self.enviar
+        self.add_item(boton_enviar)
+
+        # Botón para ver quiniela
+        boton_ver = discord.ui.Button(
+            label="Ver Quiniela",
+            style=discord.ButtonStyle.secondary,
+            custom_id=f"persistent_view:quiniela_ver_{jornada}"
+        )
+        boton_ver.callback = self.ver
+        self.add_item(boton_ver)
+
+        # Botón para editar quiniela
+        boton_editar = discord.ui.Button(
+            label="Editar Quiniela",
+            style=discord.ButtonStyle.success,
+            custom_id=f"persistent_view:quiniela_editar_{jornada}"
+        )
+        boton_editar.callback = self.editar
+        self.add_item(boton_editar)
 
     async def enviar(self, interaction: discord.Interaction):
         usuario_id = str(interaction.user.id)
@@ -312,6 +327,72 @@ class QuinielaView(discord.ui.View):
             )
         else:
             await interaction.response.send_modal(QuinielaModal1(self.jornada, partidos))
+
+    async def ver(self, interaction: discord.Interaction):
+        usuario_id = str(interaction.user.id)
+        rows = db_query(
+            "SELECT prediccion, fecha FROM quinielas WHERE usuario_id=? AND jornada=?",
+            (usuario_id, self.jornada),
+            fetch=True
+        )
+
+        if not rows:
+            await interaction.response.send_message("🔎 No tienes quiniela guardada para esta jornada.", ephemeral=True)
+            return
+
+        pred, fecha = rows[0]
+        try:
+            lista = json.loads(pred)
+        except json.JSONDecodeError:
+            lista = pred.split(",")
+
+        # Obtener los títulos de los partidos de la jornada
+        partidos = db_query(
+            "SELECT titulo FROM partidos WHERE jornada=? ORDER BY numero",
+            (self.jornada,),
+            fetch=True
+        )
+        partidos = [p[0] for p in partidos]
+
+        # Armar texto con "Partido - Resultado"
+        texto = "\n".join([
+            f"{i+1}. {partidos[i]} → {lista[i] if i < len(lista) else '—'}"
+            for i in range(len(partidos))
+        ])
+
+        embed = discord.Embed(
+            title=f"📝 Tu quiniela - Jornada {self.jornada}",
+            description=texto,
+            color=discord.Color.blue()
+        )
+        embed.set_footer(text=f"Última edición: {fecha}")
+
+        await interaction.response.send_message(embed=embed, ephemeral=True)
+
+
+    async def editar(self, interaction: discord.Interaction):
+        usuario_id = str(interaction.user.id)
+        rows = db_query("SELECT prediccion FROM quinielas WHERE usuario_id=? AND jornada=?", (usuario_id, self.jornada), fetch=True)
+
+        if not rows:
+            await interaction.response.send_message("⚠️ No tienes quiniela registrada para esta jornada.", ephemeral=True)
+            return
+
+        if jornada_bloqueada(self.jornada):
+            await interaction.response.send_message("⛔ Esta jornada está cerrada.", ephemeral=True)
+            return
+
+        try:
+            predicciones = json.loads(rows[0][0])
+        except json.JSONDecodeError:
+            predicciones = rows[0][0].split(",")
+
+        await interaction.response.send_message(
+            "✏️ Pulsa el botón para editar tu quiniela:",
+            view=EditarQuinielaButton(self.jornada, predicciones),
+            ephemeral=True
+        )
+
 
 
 
