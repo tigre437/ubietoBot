@@ -372,6 +372,9 @@ class QuinielaView(discord.ui.View):
 
     async def editar(self, interaction: discord.Interaction):
         usuario_id = str(interaction.user.id)
+        
+        rows = db_query("SELECT titulo FROM partidos WHERE jornada=? ORDER BY numero", (self.jornada,), fetch=True)
+        partidos = [row[0] for row in rows]
         rows = db_query("SELECT prediccion FROM quinielas WHERE usuario_id=? AND jornada=?", (usuario_id, self.jornada), fetch=True)
 
         if not rows:
@@ -389,7 +392,7 @@ class QuinielaView(discord.ui.View):
 
         await interaction.response.send_message(
             "✏️ Pulsa el botón para editar tu quiniela:",
-            view=EditarQuinielaButton(self.jornada, predicciones),
+            view=EditarQuinielaButton(self.jornada, predicciones, partidos),
             ephemeral=True
         )
 
@@ -621,26 +624,48 @@ async def verquiniela(ctx, jornada: int = None):
 
 
 
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
 # ---------- EDITAR QUINIELA ----------
 
 class EditarQuinielaButton(discord.ui.View):
-    def __init__(self, jornada: int, predicciones: list):
+    def __init__(self, jornada: int, predicciones: list, partidos):
         super().__init__(timeout=None)
         self.jornada = jornada
         self.predicciones = predicciones
+        self.partidos = partidos
 
     @discord.ui.button(label="Editar quiniela", style=discord.ButtonStyle.primary)
     async def button_callback(self, interaction: discord.Interaction, button: discord.ui.Button):
-        await interaction.response.send_modal(EditarQuinielaModal1(self.jornada, self.predicciones))
+        await interaction.response.send_modal(EditarQuinielaModal1(self.jornada, self.predicciones, self.partidos))
 
 class EditarQuinielaModal1(discord.ui.Modal, title="Editar Quiniela - Parte 1"):
-    def __init__(self, jornada: int, predicciones: list):
+    def __init__(self, jornada: int, predicciones: list, partidos):
         super().__init__()
         self.jornada = jornada
         self.inputs = []
+        self.partidos = partidos
+        print(self.partidos)
+        print(predicciones)
         for i, val in enumerate(predicciones[:5]):
             campo = discord.ui.TextInput(
-                label=f"Partido {i+1}",
+                label=partidos[i],
                 placeholder="Ej: 2-1",
                 max_length=5,
                 default=val
@@ -664,14 +689,15 @@ class EditarQuinielaModal1(discord.ui.Modal, title="Editar Quiniela - Parte 1"):
         )
 
 class EditarQuinielaModal2(discord.ui.Modal, title="Editar Quiniela - Parte 2"):
-    def __init__(self, jornada: int, parte1: list, predicciones: list):
+    def __init__(self, jornada: int, parte1: list, predicciones: list, partidos):
         super().__init__()
         self.jornada = jornada
         self.parte1 = parte1
         self.inputs = []
+        self.partidos = partidos
         for i, val in enumerate(predicciones[5:]):
             campo = discord.ui.TextInput(
-                label=f"Partido {i+6}",
+                label=partidos[i],
                 placeholder="Ej: 1-1",
                 max_length=5,
                 default=val
@@ -705,6 +731,8 @@ class EditarQuinielaParte2View(discord.ui.View):
     @discord.ui.button(label="Parte 2", style=discord.ButtonStyle.primary)
     async def parte2(self, interaction: discord.Interaction, button: discord.ui.Button):
         usuario_id = str(interaction.user.id)
+        rows = db_query("SELECT titulo FROM partidos WHERE jornada=? ORDER BY numero", (self.jornada,), fetch=True)
+        partidos = [row[0] for row in rows]
         rows = db_query("SELECT prediccion FROM quinielas WHERE usuario_id=? AND jornada=?", (usuario_id, self.jornada), fetch=True)
         if not rows:
             await interaction.response.send_message("⚠️ No se encontró tu quiniela.", ephemeral=True)
@@ -713,7 +741,38 @@ class EditarQuinielaParte2View(discord.ui.View):
             predicciones = json.loads(rows[0][0])
         except json.JSONDecodeError:
             predicciones = rows[0][0].split(",")
-        await interaction.response.send_modal(EditarQuinielaModal2(self.jornada, self.parte1, predicciones))
+        await interaction.response.send_modal(EditarQuinielaModal2(self.jornada, self.parte1, predicciones, partidos))
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
 
 # ---------- COMANDO ----------
 @bot.command()
@@ -762,7 +821,7 @@ async def editarquiniela(ctx, jornada: int = None):
 @bot.event
 async def on_message(message):
     # Evita que el bot borre sus propios mensajes
-    if message.author == bot.user:
+    if message.author == bot.user or message.guild.id == None:
         return
 
     # Solo aplicamos la regla en canales tipo jornada-X
