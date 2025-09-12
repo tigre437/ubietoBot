@@ -532,7 +532,10 @@ async def verquiniela(ctx, jornada: int = None):
     )
     embed.set_footer(text=f"Última edición: {fecha}")
 
-    await ctx.author.send(embed=embed)  # se manda por privado
+    try:
+        await ctx.author.send(embed=embed)  # se manda por privado
+    except:
+        await ctx.send(f"{ctx.author.mention}",embed=embed, delete_after=10)
 
 
 
@@ -668,7 +671,10 @@ async def editarquiniela(ctx, jornada: int = None):
             view=EditarQuinielaButton(jornada, predicciones)
         )
     except discord.Forbidden:
-        await ctx.send("⚠️ No puedo enviarte mensajes privados. Revisa tu configuración de privacidad.")
+        await ctx.send(
+            "✏️ Pulsa el botón para editar tu quiniela:",
+            view=EditarQuinielaButton(jornada, predicciones), delete_after=15
+        )
 
 
 @bot.event
