@@ -43,6 +43,7 @@ class PersistentViewBot(commands.Bot):
 
 
 bot = PersistentViewBot()
+bot.remove_command("help")
 
 def init_db():
     with sqlite3.connect(DB_NAME) as conn:
@@ -705,6 +706,49 @@ async def on_message(message):
 
     # Muy importante: permitir procesar comandos
     await bot.process_commands(message)
+
+from discord.ext import commands
+
+@bot.event
+async def on_command_error(ctx, error):
+    if isinstance(error, commands.CommandNotFound):
+        try:
+            await ctx.message.delete()  # Borra el mensaje del usuario
+        except discord.Forbidden:
+            pass  # Si el bot no tiene permisos, lo ignora
+
+        await ctx.send(
+            f"❌ El comando `{ctx.message.content}` no existe. Usa `!ayuda` para ver la lista de comandos.",
+            delete_after=5
+        )
+
+@bot.command(name="ayuda")
+async def help_command(ctx):
+    try:
+        await ctx.message.delete()  # Borra el mensaje del usuario
+    except discord.Forbidden:
+        pass
+
+    embed = discord.Embed(
+        title="📖 Lista de Comandos",
+        description="Aquí tienes la explicación de los comandos disponibles:",
+        color=discord.Color.blue()
+    )
+
+    embed.add_field(
+        name="`!verquiniela X`",
+        value="Muestra tu quiniela guardada de la jornada **X**.\n🔹 Ejemplo: `!verquiniela 3`",
+        inline=False
+    )
+    embed.add_field(
+        name="`!editarquiniela X`",
+        value="Te envía un mensaje privado con la opción de editar tu quiniela de la jornada **X**.\n🔹 Ejemplo: `!editarquiniela 5`",
+        inline=False
+    )
+
+    embed.set_footer(text="X = número de la jornada deseada")
+
+    await ctx.send(embed=embed, delete_after=20)  # El mensaje desaparece tras 20 seg
 
 
 
