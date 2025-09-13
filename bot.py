@@ -279,7 +279,7 @@ class QuinielaView(discord.ui.View):
         boton_enviar = discord.ui.Button(
             label="Enviar Quiniela",
             style=discord.ButtonStyle.primary,
-            custom_id=f"persistent_view:quiniela_enviar_{jornada}"
+            custom_id=f"persistent_view:quiniela_{jornada}"
         )
         boton_enviar.callback = self.enviar
         self.add_item(boton_enviar)
@@ -322,7 +322,7 @@ class QuinielaView(discord.ui.View):
                 predicciones = rows[0][0].split(",")
             await interaction.response.send_message(
                 "✏️ Ya has enviado una quiniela para esta jornada. Puedes editarla aquí:",
-                view=EditarQuinielaButton(self.jornada, predicciones),
+                view=EditarQuinielaButton(self.jornada, predicciones, partidos),
                 ephemeral=True
             )
         else:
@@ -609,7 +609,20 @@ async def verquiniela(ctx, jornada: int = None):
     except json.JSONDecodeError:
         lista = pred.split(",")
 
-    texto = "\n".join([f"{i+1}. {v}" for i, v in enumerate(lista)])
+    # Obtener los títulos de los partidos de la jornada
+    partidos = db_query(
+        "SELECT titulo FROM partidos WHERE jornada=? ORDER BY numero",
+        (jornada,),
+        fetch=True
+    )
+    partidos = [p[0] for p in partidos]
+
+    # Armar texto con "Partido → Resultado"
+    texto = "\n".join([
+        f"{i+1}. {partidos[i]} → {lista[i] if i < len(lista) else '—'}"
+        for i in range(len(partidos))
+    ])
+
     embed = discord.Embed(
         title=f"📝 Tu quiniela - Jornada {jornada}",
         description=texto,
@@ -620,7 +633,8 @@ async def verquiniela(ctx, jornada: int = None):
     try:
         await ctx.author.send(embed=embed)  # se manda por privado
     except:
-        await ctx.send(f"{ctx.author.mention}",embed=embed, delete_after=10)
+        await ctx.send(f"{ctx.author.mention}", embed=embed, delete_after=10)
+
 
 
 
@@ -661,8 +675,6 @@ class EditarQuinielaModal1(discord.ui.Modal, title="Editar Quiniela - Parte 1"):
         self.jornada = jornada
         self.inputs = []
         self.partidos = partidos
-        print(self.partidos)
-        print(predicciones)
         for i, val in enumerate(predicciones[:5]):
             campo = discord.ui.TextInput(
                 label=partidos[i],
@@ -697,7 +709,7 @@ class EditarQuinielaModal2(discord.ui.Modal, title="Editar Quiniela - Parte 2"):
         self.partidos = partidos
         for i, val in enumerate(predicciones[5:]):
             campo = discord.ui.TextInput(
-                label=partidos[i],
+                label=partidos[i+5],
                 placeholder="Ej: 1-1",
                 max_length=5,
                 default=val
@@ -821,7 +833,7 @@ async def editarquiniela(ctx, jornada: int = None):
 @bot.event
 async def on_message(message):
     # Evita que el bot borre sus propios mensajes
-    if message.author == bot.user or message.guild.id == None:
+    if message.author == bot.user or message.guild is None:
         return
 
     # Solo aplicamos la regla en canales tipo jornada-X
