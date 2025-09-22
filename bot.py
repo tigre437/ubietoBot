@@ -585,14 +585,24 @@ async def corregir(ctx, jornada: int):
 
 
 @bot.command()
-async def verquiniela(ctx, jornada: int = None):
+async def verquiniela(ctx, jornada: int = None, usuario: discord.User = None):
     await ctx.message.delete()  # borra el mensaje del comando
 
     if jornada is None:
-        await ctx.send("🔎 Debes especificar la jornada de la quiniela que quieres ver. Ej: `!verquiniela 1`", delete_after=10)
+        await ctx.send("🔎 Debes especificar la jornada de la quiniela que quieres ver. Ej: `!verquiniela 1` o `!verquiniela 1 @usuario`", delete_after=10)
         return
 
-    usuario_id = str(ctx.author.id)
+    # Si no se pasa usuario, se usa el autor
+    if usuario is None:
+        usuario = ctx.author
+    else:
+        # Si se pasa otro usuario, verificar permisos
+        if usuario != ctx.author and not ctx.author.guild_permissions.administrator:
+            await ctx.send("❌ Solo los administradores pueden ver la quiniela de otros usuarios.", delete_after=10)
+            return
+
+    usuario_id = str(usuario.id)
+
     rows = db_query(
         "SELECT prediccion, fecha FROM quinielas WHERE usuario_id=? AND jornada=?",
         (usuario_id, jornada),
@@ -600,7 +610,7 @@ async def verquiniela(ctx, jornada: int = None):
     )
 
     if not rows:
-        await ctx.send("🔎 No tienes quiniela guardada para esta jornada.", delete_after=10)
+        await ctx.send(f"🔎 No se encontró quiniela guardada para **{usuario.mention}** en la jornada {jornada}.", delete_after=10)
         return
 
     pred, fecha = rows[0]
@@ -609,7 +619,7 @@ async def verquiniela(ctx, jornada: int = None):
     except json.JSONDecodeError:
         lista = pred.split(",")
 
-    # Obtener los títulos de los partidos de la jornada
+    # Obtener títulos de los partidos
     partidos = db_query(
         "SELECT titulo FROM partidos WHERE jornada=? ORDER BY numero",
         (jornada,),
@@ -617,23 +627,26 @@ async def verquiniela(ctx, jornada: int = None):
     )
     partidos = [p[0] for p in partidos]
 
-    # Armar texto con "Partido → Resultado"
+    # Armar texto
     texto = "\n".join([
         f"{i+1}. {partidos[i]} → {lista[i] if i < len(lista) else '—'}"
         for i in range(len(partidos))
     ])
 
     embed = discord.Embed(
-        title=f"📝 Tu quiniela - Jornada {jornada}",
+        title=f"📝 Quiniela de {usuario.display_name} - Jornada {jornada}",
         description=texto,
         color=discord.Color.blue()
     )
     embed.set_footer(text=f"Última edición: {fecha}")
 
     try:
-        await ctx.author.send(embed=embed)  # se manda por privado
+        await ctx.author.send(embed=embed)  # siempre se manda al privado del que consulta
     except:
-        await ctx.send(f"{ctx.author.mention}", embed=embed, delete_after=10)
+        await ctx.send(f"{ctx.author.mention}, no pude enviarte la quiniela por privado.", delete_after=10)
+
+
+
 
 
 
